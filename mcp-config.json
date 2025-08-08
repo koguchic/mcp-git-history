@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "git-history": {
+      "command": "uv",
+      "args": ["run", "mcp-git-history"],
+      "cwd": "/Users/koguchi/Coding/mcp/mcp-git-history"
+    }
+  }
+}

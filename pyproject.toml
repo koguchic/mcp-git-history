@@ -1,0 +1,30 @@
+[project]
+name = "mcp-git-history"
+version = "0.1.0"
+description = "Model Context Protocol server for Git History Analysis - analyze git commit history, author stats, and change hotspots"
+readme = "README.md"
+authors = [
+    { name = "koguchic", email = "koguchic@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.12.4",
+]
+keywords = ["mcp", "git", "history", "analysis", "model-context-protocol"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.scripts]
+mcp-git-history = "mcp_git_history:main"
+
+[build-system]
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"

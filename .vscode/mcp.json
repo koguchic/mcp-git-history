@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "git-history-analysis": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "mcp-git-history"]
+    }
+  }
+}
