@@ -49,6 +49,15 @@ The server exposes the following tools via MCP. All tools accept JSON arguments 
 		- until (string, optional, format YYYY-MM-DD): End date filter.
 		- author (string, optional): Author name or email to filter by.
 
+- get_churn_stats
+	- Purpose: Compute code churn (additions/deletions) over an optional timeframe and path.
+	- Arguments:
+		- repo_path (string, optional): Path to the git repository.
+		- since (string, optional, format YYYY-MM-DD): Start date filter.
+		- until (string, optional, format YYYY-MM-DD): End date filter.
+		- path (string, optional): File or directory to scope churn.
+		- top_files (integer, optional, default 10): Top files by churn to list.
+
 ### Typical question types (what to ask the LLM)
 
 - Recent activity and trends
@@ -65,6 +74,7 @@ The server exposes the following tools via MCP. All tools accept JSON arguments 
 	- "Top 20 hotspots over the last month."
 - Time-bounded queries
 	- "List commits between 2025-06-01 and 2025-06-30 by alice@example.com."
+ - "Show churn (additions/deletions) since 2025-07-01 under src/."
 
 ### Example tool calls (MCP call_tool requests)
 
@@ -84,6 +94,9 @@ The exact wire format depends on your MCP client, but the tool names and argumen
 
 - get_commits_by_timeframe
 	- arguments: { "repo_path"?: string, "since"?: "YYYY-MM-DD", "until"?: "YYYY-MM-DD", "author"?: string }
+
+- get_churn_stats
+	- arguments: { "repo_path"?: string, "since"?: "YYYY-MM-DD", "until"?: "YYYY-MM-DD", "path"?: string, "top_files"?: number }
 
 Returned content: a single text payload that includes a human-readable summary plus recent commit snippets when relevant.
 
@@ -175,6 +188,41 @@ uv run pytest
 - This server does not modify repositories; it only reads history.
 - Output is textual; if you need structured metrics, extend the server to emit JSON objects alongside text.
 - Large repositories can make some queries slower; consider providing a `since` filter to scope analysis.
+
+## Roadmap & Ideas
+
+This MCP server evolves with real-world usage. Highlights and planned enhancements:
+
+### Near-term improvements
+
+- Code churn tool (done): compute additions/deletions with optional timeframe and path filtering; list top files by churn.
+- Output formats: add an option to return structured JSON alongside text (e.g., stats fields and arrays) for programmatic use.
+- Performance: cache recent `git log` results by (repo_path, since, until, path) key to reduce repeated shell-outs.
+- Robust path handling: resolve `repo_path` safely, support tilde (`~`) expansion, and normalize relative paths.
+- Better binary handling: show counts for binary changes where possible or mark them explicitly.
+
+### Analysis tools to add
+
+- Blame summary: summarize `git blame` by author for a file or directory.
+- PR/merge analysis: highlight merge commits, average time between merges, and frequency of merges.
+- Tag/release intervals: commits and contributors between tags or releases, top changed files per release.
+- Streaks & activity rhythm: author activity streaks, weekdays with highest commit volume.
+- Ownership signals: approximate file/directory ownership based on contributions and recency.
+- Refactor detector: find files with high churn and many authors (possible refactoring candidates).
+- Outlier detection: unusually large commits or bursts of changes; detect risk areas.
+- Bus factor signals: concentration of knowledge by file/directory.
+
+### Tooling & UX
+
+- Error surfaces: include suggested fixes in tool errors (e.g., missing git, invalid repo_path).
+- Paging support: allow clients to request paginated commit lists for very large ranges.
+- Configuration: allow per-user defaults (e.g., default `since` for timeframe queries).
+
+### Long-term ideas
+
+- Git providers integration: optional enrichment using GitHub/GitLab APIs for PRs and reviews (non-stdio tools).
+- Language-aware diffs: summarize types of changes (tests/docs/code) by diff path patterns.
+- Visualization hooks: emit lightweight JSON that downstream UIs can graph (churn over time, hotspots, authorship).
 
 ## License
 

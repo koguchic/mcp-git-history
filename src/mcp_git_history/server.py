@@ -142,6 +142,37 @@ class GitHistoryServer:
                         }
                     }
                 )
+                ,
+                Tool(
+                    name="get_churn_stats",
+                    description="Compute code churn (additions/deletions) over an optional timeframe and path",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "repo_path": {
+                                "type": "string",
+                                "description": "Path to the git repository"
+                            },
+                            "since": {
+                                "type": "string",
+                                "description": "Start date (YYYY-MM-DD format)"
+                            },
+                            "until": {
+                                "type": "string",
+                                "description": "End date (YYYY-MM-DD format)"
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "Optional file or directory path to scope churn"
+                            },
+                            "top_files": {
+                                "type": "integer",
+                                "description": "Number of top files by churn to include (default: 10)",
+                                "default": 10
+                            }
+                        }
+                    }
+                )
             ]
         
         @self.server.call_tool()
@@ -158,6 +189,8 @@ class GitHistoryServer:
                 return await self._find_hotspots(arguments)
             elif name == "get_commits_by_timeframe":
                 return await self._get_commits_by_timeframe(arguments)
+            elif name == "get_churn_stats":
+                return await self._get_churn_stats(arguments)
             else:
                 raise ValueError(f"Unknown tool: {name}")
     
@@ -492,6 +525,94 @@ class GitHistoryServer:
             
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error getting commits by timeframe: {str(e)}")]
+
+    async def _get_churn_stats(self, arguments: dict) -> list[types.TextContent]:
+        """Compute code churn (additions/deletions) over an optional timeframe and path"""
+        repo_path = arguments.get("repo_path")
+        since = arguments.get("since")
+        until = arguments.get("until")
+        scope_path = arguments.get("path")
+        top_files = int(arguments.get("top_files", 10))
+
+        try:
+            # Build base git log with numstat to get per-file additions/deletions
+            cmd = ["git", "log", "--numstat", "--pretty=format:"]
+            if since:
+                cmd.extend(["--since", since])
+            if until:
+                cmd.extend(["--until", until])
+            if scope_path:
+                cmd.extend(["--", scope_path])
+
+            output = self._run_git_command(cmd, repo_path)
+
+            total_add = 0
+            total_del = 0
+            per_file: dict[str, tuple[int, int]] = {}
+
+            for line in output.strip().split("\n"):
+                if not line.strip():
+                    continue
+                parts = line.split("\t")
+                if len(parts) < 3:
+                    continue
+                add_s, del_s, file_path = parts[0], parts[1], parts[2]
+                # Handle binary files marked as '-'
+                try:
+                    adds = int(add_s) if add_s.isdigit() else 0
+                    dels = int(del_s) if del_s.isdigit() else 0
+                except ValueError:
+                    adds = 0
+                    dels = 0
+                total_add += adds
+                total_del += dels
+                a, d = per_file.get(file_path, (0, 0))
+                per_file[file_path] = (a + adds, d + dels)
+
+            # Get commit count and date range for the same filters
+            dates_cmd = ["git", "log", "--pretty=format:%ad", "--date=short"]
+            if since:
+                dates_cmd.extend(["--since", since])
+            if until:
+                dates_cmd.extend(["--until", until])
+            if scope_path:
+                dates_cmd.extend(["--", scope_path])
+
+            dates_out = self._run_git_command(dates_cmd, repo_path)
+            dates = [d for d in dates_out.strip().split("\n") if d.strip()]
+            commit_count = len(dates)
+
+            result = "## Code Churn Statistics\n\n"
+            filters = []
+            if since:
+                filters.append(f"since {since}")
+            if until:
+                filters.append(f"until {until}")
+            if scope_path:
+                filters.append(f"path '{scope_path}'")
+            if filters:
+                result += f"**Filters:** {', '.join(filters)}\n"
+            result += f"**Total commits considered:** {commit_count}\n"
+            if dates:
+                result += f"**Date range:** {min(dates)} to {max(dates)}\n"
+            result += f"**Total additions:** {total_add}\n"
+            result += f"**Total deletions:** {total_del}\n"
+            result += f"**Net change:** {total_add - total_del}\n\n"
+
+            if per_file:
+                # rank by churn (adds + dels)
+                ranked = sorted(per_file.items(), key=lambda kv: (kv[1][0] + kv[1][1]), reverse=True)
+                top = ranked[: max(0, top_files)]
+                result += f"**Top files by churn (additions+deletions) — Top {len(top)}:**\n"
+                for idx, (fp, (a, d)) in enumerate(top, 1):
+                    result += f"{idx}. {fp}: +{a} / -{d} (total {a + d})\n"
+            else:
+                result += "No churn found for the specified filters.\n"
+
+            return [types.TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error computing churn stats: {str(e)}")]
     
     async def run(self):
         """Run the MCP server"""
